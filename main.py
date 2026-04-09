@@ -65,3 +65,20 @@ with open(report_file, "w", encoding="utf-8") as f:
     f.write(report)
 
 print("✅ Report generated:", report_file)
+
+# === 產出 Word 檔 ===
+from docx import Document
+
+doc = Document()
+doc.add_heading("Oracle & Wiwynn 產業分析月報", level=1)
+
+for line in report.split("\n"):
+    if line.strip().startswith("【"):
+        doc.add_heading(line.strip(), level=2)
+    else:
+        doc.add_paragraph(line)
+
+word_file = f"report_{month}.docx"
+doc.save(word_file)
+
+print("✅ Word report generated:", word_file)
