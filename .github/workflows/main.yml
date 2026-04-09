@@ -28,3 +28,9 @@ jobs:
           git add *.csv
           git commit -m "Add monthly news CSV" || echo "No changes"
           git push
+          
+      - name: Commit report
+        run: |
+          git add report_*.txt
+          git commit -m "Add monthly analysis report" || echo "No report to commit"
+          git push
