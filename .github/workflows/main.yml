@@ -16,7 +16,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install feedparser
+        run: pip install feedparser python-docx
 
       - name: Run main script
         run: python main.py
