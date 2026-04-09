@@ -20,7 +20,11 @@ jobs:
 
       - name: Run main script
         run: python main.py
-        
+        env:
+           EMAIL_USER: ${{ secrets.EMAIL_USER }}
+           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+
       - name: Commit CSV
         run: |
           git config user.name "github-actions"
