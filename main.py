@@ -82,13 +82,22 @@ prompt = f"""
 {news_text}
 """
 
-response = openai.ChatCompletion.create(
+
+from openai import OpenAI
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+response = client.chat.completions.create(
     model="gpt-4o-mini",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.3
+    messages=[
+        {"role": "system", "content": "你是一位資料中心與雲端產業分析師"},
+        {"role": "user", "content": prompt}
+    ],
+    temperature=0.3,
 )
 
-report = response["choices"][0]["message"]["content"]
+report = response.choices[0].message.content
+
 
 
 # 4. 寫出報告檔
