@@ -17,3 +17,11 @@ jobs:
 
       - name: Run main script
         run: python main.py
+        
+      - name: Commit CSV
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add *.csv
+          git commit -m "Add monthly news CSV" || echo "No changes"
+          git push
