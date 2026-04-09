@@ -82,3 +82,35 @@ word_file = f"report_{month}.docx"
 doc.save(word_file)
 
 print("✅ Word report generated:", word_file)
+
+# === 寄 Email ===
+import smtplib
+from email.message import EmailMessage
+import os
+
+email_user = os.getenv("EMAIL_USER")
+email_pass = os.getenv("EMAIL_PASS")
+email_to = os.getenv("EMAIL_TO")
+
+if email_user and email_pass and email_to:
+    msg = EmailMessage()
+    msg["Subject"] = f"Oracle & Wiwynn 產業分析月報 - {month}"
+    msg["From"] = email_user
+    msg["To"] = email_to
+    msg.set_content("請參閱附件：本月 Oracle & Wiwynn 產業分析報告（Word）")
+
+    with open(word_file, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=word_file
+        )
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(email_user, email_pass)
+        smtp.send_message(msg)
+
+    print("✅ Email sent successfully")
+else:
+    print("⚠️ Email not sent (missing credentials)")
