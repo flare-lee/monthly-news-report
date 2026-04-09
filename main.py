@@ -1,4 +1,7 @@
 
+import os
+import openai
+
 import csv
 from datetime import datetime
 
@@ -24,9 +27,13 @@ TECH_KEYWORDS = [
     "AI", "Data Center", "Server", "Rack", "Infrastructure"
 ]
 
+rows = []
+
 with open(csv_file, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
     for row in reader:
+        rows.append(row)          # ✅ 關鍵就在這一行
+
         title = row["title"]
         company = row["company"]
 
@@ -44,20 +51,45 @@ with open(csv_file, newline="", encoding="utf-8") as f:
             if kw.lower() in title.lower():
                 tech_keywords_count += 1
 
+news_text = ""
+for r in rows:
+    news_text += f"- {r['company']}: {r['title']}\n"
+
+
 # 3. 組出分析文字（這就是你的報告正文）
-report = f"""
+
+
+prompt = f"""
+你是一位資料中心與雲端產業分析師，
+請根據以下新聞標題，撰寫一份產業分析月報，
+必須包含以下三個段落，請用繁體中文撰寫：
+
 【市場趨勢】
-- Oracle 在本月新聞中持續強化 AI 與雲端基礎建設布局（相關新聞 {oracle_news} 則）
-- Wiwynn 的新聞多集中在 AI Server 與資料中心需求成長（相關新聞 {wiwynn_news} 則）
+- Oracle AI 與雲端基礎建設布局
+- Wiwynn 與 AI Server、市場需求
 
 【技術更新】
-- AI Infrastructure、Data Center、Rack-level Server 為關鍵字高頻出現（關鍵字命中約 {tech_keywords_count} 次）
-- 顯示 hyperscaler 對高密度運算與系統整合能力的持續需求
+- AI Infrastructure
+- Data Center
+- Rack-level Server
+- hyperscaler 對高密度運算需求
 
 【財務與策略訊號】
-- Oracle 資本支出與雲端投資相關新聞增加
-- ODM 端（{", ".join(sorted(odm_mentions)) if odm_mentions else "Wiwynn"}）在 AI 與資料中心供應鏈中扮演關鍵角色
+- Oracle 的資本支出與雲端投資方向
+- ODM 競爭（Wiwynn、Quanta、Wistron、Inventec 等）
+
+以下是本月新聞標題清單：
+{news_text}
 """
+
+response = openai.ChatCompletion.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3
+)
+
+report = response["choices"][0]["message"]["content"]
+
 
 # 4. 寫出報告檔
 report_file = f"report_{month}.txt"
@@ -114,3 +146,5 @@ if email_user and email_pass and email_to:
     print("✅ Email sent successfully")
 else:
     print("⚠️ Email not sent (missing credentials)")
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
