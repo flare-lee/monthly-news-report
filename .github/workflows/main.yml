@@ -1,40 +1,47 @@
-name: Run Python
+name: Monthly Industry News Report
 
 permissions:
   contents: write
 
 on:
   workflow_dispatch:
+  schedule:
+    # 每月 1 號 01:00 UTC（台灣 09:00）
+    - cron: '0 1 1 * *'
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # 1️⃣ 拿 repo 內容
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ 設定 Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
+      # 3️⃣ 安裝你實際有用到的套件
       - name: Install dependencies
-        run: pip install feedparser python-docx google-genai
+        run: |
+          pip install feedparser python-docx
 
+      # 4️⃣ 跑你的 main.py（⭐重點）
       - name: Run main script
         run: python main.py
         env:
-           EMAIL_USER: ${{ secrets.EMAIL_USER }}
-           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
 
-      - name: Commit CSV
+      # 5️⃣ 把產出的檔案存回 repo（CSV / txt / docx）
+      - name: Commit output files
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add *.csv
-          git commit -m "Add monthly news CSV" || echo "No changes"
-          git push
-          
-      - name: Commit report
-        run: |
-          git add report_*.txt
-          git commit -m "Add monthly analysis report" || echo "No report to commit"
+          git add news_*.csv ai_input_*.txt report_*.docx
+          git commit -m "Monthly auto-generated industry report" || echo "No changes to commit"
           git push
