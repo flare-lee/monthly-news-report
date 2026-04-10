@@ -26,8 +26,8 @@ for r in rows:
     news_text += f"- {r['company']}: {r['title']}\n"
 
 # ========= Gemini 設定 =========
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel("gemini-pro")
 
 prompt = f"""
 你是一位資料中心與雲端產業分析師，
