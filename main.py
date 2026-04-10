@@ -9,14 +9,11 @@ from email.message import EmailMessage
 # 基本設定
 # =========================
 month = datetime.utcnow().strftime("%Y_%m")
-
 csv_file = f"news_{month}.csv"
-ai_input_file = f"ai_input_{month}.txt"
-report_file = f"report_{month}.txt"
 word_file = f"report_{month}.docx"
 
 # =========================
-# 讀取新聞 CSV（原始資料）
+# 讀取新聞 CSV
 # =========================
 rows = []
 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -25,53 +22,43 @@ with open(csv_file, newline="", encoding="utf-8") as f:
         rows.append(row)
 
 # =========================
-# 整理新聞成固定三類
+# 分類新聞（市場 / 技術 / 財務）
 # =========================
 market_news = []
 tech_news = []
 finance_news = []
 
 for r in rows:
-    title = r["title"]
+    title = r["title"].lower()
+    company = r["company"]
 
-    # 市場趨勢
-    if any(k in title for k in ["cloud", "AI", "market", "demand", "growth"]):
-        market_news.append(f"- {r['company']}：{title}")
+    if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
+        market_news.append(f"- {company}：{r['title']}")
 
-    # 技術更新
-    if any(k in title.lower() for k in ["data center", "server", "rack", "infrastructure"]):
-        tech_news.append(f"- {r['company']}：{title}")
+    if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
+        tech_news.append(f"- {company}：{r['title']}")
 
-    # 財務與策略
-    if any(k in title.lower() for k in ["capex", "investment", "revenue", "order"]):
-        finance_news.append(f"- {r['company']}：{title}")
+    if any(k in title for k in ["capex", "investment", "revenue", "order"]):
+        finance_news.append(f"- {company}：{r['title']}")
 
 # =========================
-# 組「唯一要送 AI 的檔案」
+# 組成「AI 專用指令＋新聞資料」（直接寫進 Word）
 # =========================
-ai_input = f"""
+ai_prompt = f"""
 你是一位【資料中心與雲端產業分析師】，
 請以【提供企業管理層與策略決策使用】的專業語氣，
 根據以下新聞資料，撰寫一份【產業分析月報】。
 
-請嚴格依照指定結構輸出，
+請嚴格依照下列結構輸出，
 不要條列新聞、不要解釋分析方法，
-只輸出【可直接放進正式報告】的完整段落文字，
+只輸出可直接放進正式報告的「完整段落文字」，
 語言請使用【繁體中文】。
 
 ＝＝＝＝ 指定輸出結構（不可更改）＝＝＝＝
 
 【市場趨勢】
-請說明 Oracle 在 AI 與雲端基礎建設的策略方向，
-以及 Wiwynn 與資料中心需求所代表的市場趨勢。
-
 【技術更新】
-請聚焦 AI Infrastructure、Data Center、
-Rack-level Server、高密度運算與系統架構演進。
-
 【財務與策略訊號】
-請分析 Oracle 的資本支出與雲端投資動向，
-以及 ODM 競爭格局（Wiwynn、Quanta、Wistron、Inventec 等）。
 
 ＝＝＝＝ 本月新聞資料（已整理）＝＝＝＝
 
@@ -85,31 +72,38 @@ Rack-level Server、高密度運算與系統架構演進。
 {chr(10).join(finance_news)}
 """
 
-with open(ai_input_file, "w", encoding="utf-8") as f:
-    f.write(ai_input)
-
-print("✅ ai_input file generated:", ai_input_file)
-
 # =========================
-# 產生 Word（交付用）
+# 產出 Word（唯一交付檔案）
 # =========================
 doc = Document()
 doc.add_heading("Oracle & Wiwynn 產業分析月報", level=1)
 
+doc.add_paragraph(
+    "【以下整段內容請直接全選，貼至 Gemini / ChatGPT，"
+    "AI 會直接輸出完整專業報告】"
+)
+
+doc.add_paragraph("──────── AI 輸入內容（請勿修改）────────")
+for line in ai_prompt.strip().split("\n"):
+    doc.add_paragraph(line)
+doc.add_paragraph("──────── AI 輸入內容結束 ────────")
+
+doc.add_page_break()
+
 doc.add_heading("【市場趨勢】", level=2)
-doc.add_paragraph("（請貼上 AI 產生的專業分析內容）")
+doc.add_paragraph("（請貼上 AI 產生的完整段落內容）")
 
 doc.add_heading("【技術更新】", level=2)
-doc.add_paragraph("（請貼上 AI 產生的專業分析內容）")
+doc.add_paragraph("（請貼上 AI 產生的完整段落內容）")
 
 doc.add_heading("【財務與策略訊號】", level=2)
-doc.add_paragraph("（請貼上 AI 產生的專業分析內容）")
+doc.add_paragraph("（請貼上 AI 產生的完整段落內容）")
 
 doc.save(word_file)
 print("✅ Word report generated:", word_file)
 
 # =========================
-# 寄 Email
+# 寄送 Email（只寄 Word）
 # =========================
 email_user = os.getenv("EMAIL_USER")
 email_pass = os.getenv("EMAIL_PASS")
@@ -121,23 +115,20 @@ if email_user and email_pass and email_to:
     msg["From"] = email_user
     msg["To"] = email_to
     msg.set_content(
-        "附件包含本月產業分析報告與 AI 輸入檔。\n\n"
-        "請開啟 ai_input 檔案，完整複製貼至 AI，即可產生報告正文。"
+        "附件為本月 Oracle & Wiwynn 產業分析月報。\n\n"
+        "請在 Word 中『AI 輸入內容』區塊全選後貼到 AI，即可產出完整報告。"
     )
 
-    for file in [word_file, ai_input_file]:
-        with open(file, "rb") as f:
-            msg.add_attachment(
-                f.read(),
-                maintype="application",
-                subtype="octet-stream",
-                filename=file
-            )
+    with open(word_file, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=word_file
+        )
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(email_user, email_pass)
         smtp.send_message(msg)
-
     print("✅ Email sent successfully")
 
-print("✅ Monthly workflow completed")
