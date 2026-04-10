@@ -21,7 +21,7 @@ month = datetime.utcnow().strftime("%Y_%m")
 csv_file = f"news_{month}.csv"
 report_file = f"report_{month}.txt"
 word_file = f"report_{month}.docx"
-
+ai_input_file = f"ai_input_{month}.txt"
 # ========= 讀取 CSV =========
 rows = []
 with open(csv_file, newline="", encoding="utf-8") as f:
