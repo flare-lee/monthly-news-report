@@ -1,5 +1,13 @@
 
-from google import genai
+
+ai_input_file = f"ai_input_{month}.txt"
+
+with open(ai_input_file, "w", encoding="utf-8") as f:
+    f.write(prompt)
+
+print("✅ AI input file generated:", ai_input_file)
+
+
 import os
 import csv
 
@@ -29,7 +37,6 @@ for r in rows:
 # ========= Gemini 設定 =========
 
 
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
 
@@ -57,12 +64,7 @@ prompt = f"""
 {news_text}
 """
 
-response = client.models.generate_content(
-    model="gemini-1.5-flash",
-    contents=prompt,
-)
 
-report = response.text
 
 # ========= 寫文字報告 =========
 with open(report_file, "w", encoding="utf-8") as f:
