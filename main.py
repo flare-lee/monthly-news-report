@@ -1,8 +1,9 @@
 
+from google import genai
 import os
 import csv
+
 from datetime import datetime
-import google.generativeai as genai
 from docx import Document
 import smtplib
 from email.message import EmailMessage
@@ -26,8 +27,11 @@ for r in rows:
     news_text += f"- {r['company']}: {r['title']}\n"
 
 # ========= Gemini 設定 =========
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel("gemini-pro")
+
+
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+
 
 prompt = f"""
 你是一位資料中心與雲端產業分析師，
@@ -53,12 +57,9 @@ prompt = f"""
 {news_text}
 """
 
-response = model.generate_content(
-    prompt,
-    generation_config={
-        "temperature": 0.3,
-        "max_output_tokens": 1200
-    }
+response = client.models.generate_content(
+    model="gemini-1.5-flash",
+    contents=prompt,
 )
 
 report = response.text
