@@ -21,7 +21,6 @@ jobs:
       - name: Run main script
         run: python main.py
         env:
-           GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
            EMAIL_USER: ${{ secrets.EMAIL_USER }}
            EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
            EMAIL_TO: ${{ secrets.EMAIL_TO }}
