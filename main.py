@@ -1,7 +1,5 @@
 import os
 import csv
-import json
-import requests
 from datetime import datetime
 from docx import Document
 import smtplib
@@ -12,20 +10,19 @@ from email.message import EmailMessage
 # =========================
 month = datetime.now().strftime("%Y_%m")
 csv_file = f"news_{month}.csv"
-word_file = f"report_{month}.docx"
+word_file = f"report_instruction_{month}.docx"
 
-gemini_key = os.getenv("GEMINI_API_KEY")
 email_user = os.getenv("EMAIL_USER")
 email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
 # =========================
-# 2. 讀取新聞 CSV
+# 2. 讀取並分類新聞
 # =========================
 market_news, tech_news, finance_news = [], [], []
 
 if not os.path.exists(csv_file):
-    print(f"❌ 找不到檔案: {csv_file}")
+    print(f"❌ 找不到 CSV 檔案：{csv_file}")
     exit(1)
 
 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -34,6 +31,7 @@ with open(csv_file, newline="", encoding="utf-8") as f:
         title = r.get("title", "").lower()
         company = r.get("company", "未知公司")
         content = f"- {company}：{r.get('title', '')}"
+        
         if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
             market_news.append(content)
         if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
@@ -42,14 +40,9 @@ with open(csv_file, newline="", encoding="utf-8") as f:
             finance_news.append(content)
 
 # =========================
-# 3. 用原始 HTTP 請求呼叫 Gemini (避開 SDK 404 Bug)
+# 3. 組成 AI 專用指令 (使用 Flare 指定的文字)
 # =========================
-def call_gemini_api_direct(market, tech, finance):
-    if not gemini_key:
-        return "錯誤：未設定 GEMINI_API_KEY"
-
-    # 這就是你指定的專業 Prompt，完整保留
-    ai_prompt = f"""
+ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
 
 請根據以下已整理的新聞資料、公司資訊與產業背景，撰寫一份【Oracle & Wiwynn 產業分析月報】。
@@ -90,66 +83,43 @@ def call_gemini_api_direct(market, tech, finance):
 請清楚區分短期市場變化與中長期結構性趨勢，
 並說明這些變化對 Oracle、ODM/OEM 與終端客戶各自的商業含義。
 
-請不要只是描述新聞，
-而要將新聞轉化為產業結論、競爭含義與策略推演，
-產出可直接提交給主管、客戶或管理層閱讀的正式分析報告。
-
 ＝＝＝＝ 本月已整理新聞資料 ＝＝＝＝
 
 【市場趨勢相關新聞】
-{chr(10).join(market)}
+{chr(10).join(market_news)}
 
 【技術更新相關新聞】
-{chr(10).join(tech)}
+{chr(10).join(tech_news)}
 
 【財務與策略相關新聞】
-{chr(10).join(finance)}
+{chr(10).join(finance_news)}
 """
 
-    # 直接針對 Google 的 API 端點發送 POST 請求 (使用 v1 穩定版本)
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{
-            "parts": [{"text": ai_prompt}]
-        }]
-    }
-
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        result = response.json()
-        
-        # 解析回傳結果
-        if response.status_code == 200:
-            return result['candidates'][0]['content']['parts'][0]['text']
-        else:
-            return f"API 報錯：{result.get('error', {}).get('message', '未知錯誤')}"
-    except Exception as e:
-        return f"連線失敗：{str(e)}"
-
 # =========================
-# 4. 執行與寄送
+# 4. 存入 Word
 # =========================
-print(f"🚀 正在透過 Direct API 分析 {month} 資料...")
-report_text = call_gemini_api_direct(market_news, tech_news, finance_news)
-
 doc = Document()
-doc.add_heading(f"Oracle & Wiwynn 產業分析月報 - {month}", 0)
-doc.add_paragraph(report_text)
+doc.add_heading(f"Oracle & Wiwynn 產業分析指令 - {month}", 0)
+doc.add_paragraph("【操作說明】全選下方內容並貼至 ChatGPT / Gemini 即可產出專業報告。")
+doc.add_paragraph("--------------------------------------------------")
+doc.add_paragraph(ai_prompt)
 doc.save(word_file)
 
+# =========================
+# 5. 寄件 (這部分保留，這樣你收信就能直接複製)
+# =========================
 if email_user and email_pass:
     msg = EmailMessage()
-    msg["Subject"] = f"Oracle & Wiwynn 產業分析月報 - {month}"
+    msg["Subject"] = f"【指令產生】Oracle & Wiwynn 產業月報分析指令 - {month}"
     msg["From"] = email_user
     msg["To"] = email_to
-    msg.set_content(f"Flare 你好，本月分析報告已自動生成。")
+    msg.set_content(f"Flare 你好，本月的 AI 指令已準備好。請打開附件 Word，複製內容後貼給 AI 即可生成專業報告。")
     with open(word_file, "rb") as f:
         msg.add_attachment(f.read(), maintype="application", subtype="docx", filename=word_file)
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(email_user, email_pass)
             smtp.send_message(msg)
-        print("✅ 郵件寄送成功！")
+        print("✅ 郵件寄送成功，請去信箱收信！")
     except Exception as e:
         print(f"❌ 郵件寄送失敗: {e}")
