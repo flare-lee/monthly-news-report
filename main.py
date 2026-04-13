@@ -7,7 +7,7 @@ from email.message import EmailMessage
 import google.generativeai as genai
 
 # =========================
-# 基本設定
+# 1. 基本設定與環境變數
 # =========================
 month = datetime.now().strftime("%Y_%m")
 csv_file = f"news_{month}.csv"
@@ -19,12 +19,12 @@ email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
 # =========================
-# 讀取新聞 CSV
+# 2. 讀取新聞 CSV 資料
 # =========================
 market_news, tech_news, finance_news = [], [], []
 
 if not os.path.exists(csv_file):
-    print(f"❌ 找不到檔案: {csv_file}")
+    print(f"❌ 嚴重錯誤：找不到 {csv_file}")
     exit(1)
 
 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -33,7 +33,6 @@ with open(csv_file, newline="", encoding="utf-8") as f:
         title = r.get("title", "").lower()
         company = r.get("company", "未知公司")
         content = f"- {company}：{r.get('title', '')}"
-
         if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
             market_news.append(content)
         if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
@@ -42,21 +41,14 @@ with open(csv_file, newline="", encoding="utf-8") as f:
             finance_news.append(content)
 
 # =========================
-# Gemini API (完整保留你的 Prompt)
+# 3. Gemini API 呼叫 (最強防錯版)
 # =========================
 def call_gemini_api(market, tech, finance):
     if not gemini_key:
         return "錯誤：未設定 GEMINI_API_KEY"
 
-    try:
-        # 修正 404 關鍵：強制指定版本與傳輸方式
-        genai.configure(api_key=gemini_key, transport='rest')
-        
-        # 使用最穩定的模型名稱格式
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
-        # 這裡完整使用你提供的「華爾街分析師」指令字串
-        ai_prompt = f"""
+    # 完整保留你指定的專業 Prompt
+    ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
 
 請根據以下已整理的新聞資料、公司資訊與產業背景，撰寫一份【Oracle & Wiwynn 產業分析月報】。
@@ -112,22 +104,45 @@ def call_gemini_api(market, tech, finance):
 【財務與策略相關新聞】
 {chr(10).join(finance)}
 """
-        # 生成內容
-        response = model.generate_content(ai_prompt)
-        return response.text if response.text else "AI 生成失敗"
+
+    try:
+        genai.configure(api_key=gemini_key)
+        
+        # 嘗試清單：手動列出所有可能成功的模型路徑
+        possible_models = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']
+        
+        last_error = ""
+        for m_name in possible_models:
+            try:
+                print(f"🔄 嘗試使用模型: {m_name}...")
+                model = genai.GenerativeModel(model_name=m_name)
+                response = model.generate_content(ai_prompt)
+                if response.text:
+                    print(f"✅ 成功使用 {m_name} 生成報告")
+                    return response.text
+            except Exception as e:
+                last_error = str(e)
+                continue
+        
+        # 如果走到這代表全掛了，我們印出所有可用的模型清單來診斷
+        print("❌ 所有已知模型名稱皆失效。可用模型清單如下：")
+        for m in genai.list_models():
+            print(f"- {m.name} (支援方法: {m.supported_generation_methods})")
+            
+        return f"AI 生成最終失敗，最後一個錯誤：{last_error}"
 
     except Exception as e:
-        return f"AI 生成失敗，錯誤訊息：{str(e)}"
+        return f"API 配置發生嚴重錯誤：{str(e)}"
 
 # =========================
-# 執行、儲存與寄送
+# 4. 執行與寄送
 # =========================
-print("🚀 正在根據你的指令生成報告...")
-final_content = call_gemini_api(market_news, tech_news, finance_news)
+print(f"🚀 開始分析 {month} 資料...")
+report_text = call_gemini_api(market_news, tech_news, finance_news)
 
 doc = Document()
-doc.add_heading(f"Oracle & Wiwynn 產業分析月報 - {month}", level=0)
-doc.add_paragraph(final_content)
+doc.add_heading(f"Oracle & Wiwynn 產業分析月報 - {month}", 0)
+doc.add_paragraph(report_text)
 doc.save(word_file)
 
 if email_user and email_pass:
@@ -135,12 +150,13 @@ if email_user and email_pass:
     msg["Subject"] = f"Oracle & Wiwynn 產業分析月報 - {month}"
     msg["From"] = email_user
     msg["To"] = email_to
-    msg.set_content("Flare 你好，本月分析報告已自動生成，請查收附件。")
-
+    msg.set_content(f"Flare 你好，本月分析報告已自動生成。")
     with open(word_file, "rb") as f:
         msg.add_attachment(f.read(), maintype="application", subtype="docx", filename=word_file)
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(email_user, email_pass)
-        smtp.send_message(msg)
-    print("✅ 郵件已寄出")
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(email_user, email_pass)
+            smtp.send_message(msg)
+        print("✅ 郵件寄送成功！")
+    except Exception as e:
+        print(f"❌ 郵件寄送失敗: {e}")
