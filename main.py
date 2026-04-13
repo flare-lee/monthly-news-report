@@ -1,13 +1,14 @@
 import os
 import csv
+import json
+import requests
 from datetime import datetime
 from docx import Document
 import smtplib
 from email.message import EmailMessage
-import google.generativeai as genai
 
 # =========================
-# 1. 基本設定與環境變數
+# 1. 基本設定
 # =========================
 month = datetime.now().strftime("%Y_%m")
 csv_file = f"news_{month}.csv"
@@ -19,12 +20,12 @@ email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
 # =========================
-# 2. 讀取新聞 CSV 資料
+# 2. 讀取新聞 CSV
 # =========================
 market_news, tech_news, finance_news = [], [], []
 
 if not os.path.exists(csv_file):
-    print(f"❌ 嚴重錯誤：找不到 {csv_file}")
+    print(f"❌ 找不到檔案: {csv_file}")
     exit(1)
 
 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -41,13 +42,13 @@ with open(csv_file, newline="", encoding="utf-8") as f:
             finance_news.append(content)
 
 # =========================
-# 3. Gemini API 呼叫 (最強防錯版)
+# 3. 用原始 HTTP 請求呼叫 Gemini (避開 SDK 404 Bug)
 # =========================
-def call_gemini_api(market, tech, finance):
+def call_gemini_api_direct(market, tech, finance):
     if not gemini_key:
         return "錯誤：未設定 GEMINI_API_KEY"
 
-    # 完整保留你指定的專業 Prompt
+    # 這就是你指定的專業 Prompt，完整保留
     ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
 
@@ -105,40 +106,32 @@ def call_gemini_api(market, tech, finance):
 {chr(10).join(finance)}
 """
 
-    try:
-        genai.configure(api_key=gemini_key)
-        
-        # 嘗試清單：手動列出所有可能成功的模型路徑
-        possible_models = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']
-        
-        last_error = ""
-        for m_name in possible_models:
-            try:
-                print(f"🔄 嘗試使用模型: {m_name}...")
-                model = genai.GenerativeModel(model_name=m_name)
-                response = model.generate_content(ai_prompt)
-                if response.text:
-                    print(f"✅ 成功使用 {m_name} 生成報告")
-                    return response.text
-            except Exception as e:
-                last_error = str(e)
-                continue
-        
-        # 如果走到這代表全掛了，我們印出所有可用的模型清單來診斷
-        print("❌ 所有已知模型名稱皆失效。可用模型清單如下：")
-        for m in genai.list_models():
-            print(f"- {m.name} (支援方法: {m.supported_generation_methods})")
-            
-        return f"AI 生成最終失敗，最後一個錯誤：{last_error}"
+    # 直接針對 Google 的 API 端點發送 POST 請求 (使用 v1 穩定版本)
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        "contents": [{
+            "parts": [{"text": ai_prompt}]
+        }]
+    }
 
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        result = response.json()
+        
+        # 解析回傳結果
+        if response.status_code == 200:
+            return result['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"API 報錯：{result.get('error', {}).get('message', '未知錯誤')}"
     except Exception as e:
-        return f"API 配置發生嚴重錯誤：{str(e)}"
+        return f"連線失敗：{str(e)}"
 
 # =========================
 # 4. 執行與寄送
 # =========================
-print(f"🚀 開始分析 {month} 資料...")
-report_text = call_gemini_api(market_news, tech_news, finance_news)
+print(f"🚀 正在透過 Direct API 分析 {month} 資料...")
+report_text = call_gemini_api_direct(market_news, tech_news, finance_news)
 
 doc = Document()
 doc.add_heading(f"Oracle & Wiwynn 產業分析月報 - {month}", 0)
