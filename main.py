@@ -7,7 +7,7 @@ from email.message import EmailMessage
 import google.generativeai as genai
 
 # =========================
-# 基本設定與環境變數
+# 基本設定
 # =========================
 month = datetime.now().strftime("%Y_%m")
 csv_file = f"news_{month}.csv"
@@ -21,48 +21,48 @@ email_to = os.getenv("EMAIL_TO")
 # =========================
 # 讀取新聞 CSV
 # =========================
-market_news = []
-tech_news = []
-finance_news = []
+market_news, tech_news, finance_news = [], [], []
 
-try:
-    with open(csv_file, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for r in reader:
-            title = r["title"].lower()
-            company = r["company"]
-            content = f"- {company}：{r['title']}"
-
-            if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
-                market_news.append(content)
-            if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
-                tech_news.append(content)
-            if any(k in title for k in ["capex", "investment", "revenue", "order"]):
-                finance_news.append(content)
-except FileNotFoundError:
+if not os.path.exists(csv_file):
     print(f"❌ 找不到檔案: {csv_file}")
     exit(1)
 
+with open(csv_file, newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    for r in reader:
+        title = r.get("title", "").lower()
+        company = r.get("company", "未知公司")
+        content = f"- {company}：{r.get('title', '')}"
+
+        if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
+            market_news.append(content)
+        if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
+            tech_news.append(content)
+        if any(k in title for k in ["capex", "investment", "revenue", "order"]):
+            finance_news.append(content)
+
 # =========================
-# Gemini AI 生成報告內容 (整合你的最新 Prompt)
+# Gemini API (完整保留你的 Prompt)
 # =========================
 def call_gemini_api(market, tech, finance):
     if not gemini_key:
         return "錯誤：未設定 GEMINI_API_KEY"
 
     try:
-        genai.configure(api_key=gemini_key)
-        # 使用最新穩定版名稱避免 404
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # 修正 404 關鍵：強制指定版本與傳輸方式
+        genai.configure(api_key=gemini_key, transport='rest')
+        
+        # 使用最穩定的模型名稱格式
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
-        # 這裡放入你改過後的完整 Prompt
+        # 這裡完整使用你提供的「華爾街分析師」指令字串
         ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
 
 請根據以下已整理的新聞資料、公司資訊與產業背景，撰寫一份【Oracle & Wiwynn 產業分析月報】。
 
 請嚴格遵守以下規範：
-- 請直接輸出一份完整的專業報告內容
+- 請直接輸出一份word的完整報告
 - 需參考我提供的新聞與資料，將資訊整理為重點並進一步分析，不可只是摘要重述
 - 請勿提及分析步驟、推理過程或你如何整理資料
 - 請使用繁體中文
@@ -97,6 +97,10 @@ def call_gemini_api(market, tech, finance):
 請清楚區分短期市場變化與中長期結構性趨勢，
 並說明這些變化對 Oracle、ODM/OEM 與終端客戶各自的商業含義。
 
+請不要只是描述新聞，
+而要將新聞轉化為產業結論、競爭含義與策略推演，
+產出可直接提交給主管、客戶或管理層閱讀的正式分析報告。
+
 ＝＝＝＝ 本月已整理新聞資料 ＝＝＝＝
 
 【市場趨勢相關新聞】
@@ -108,49 +112,35 @@ def call_gemini_api(market, tech, finance):
 【財務與策略相關新聞】
 {chr(10).join(finance)}
 """
-        
+        # 生成內容
         response = model.generate_content(ai_prompt)
-        return response.text if response.text else "AI 生成內容為空。"
+        return response.text if response.text else "AI 生成失敗"
 
     except Exception as e:
         return f"AI 生成失敗，錯誤訊息：{str(e)}"
 
-print("🚀 正在呼叫 Gemini API 生成專業報告...")
-final_report_content = call_gemini_api(market_news, tech_news, finance_news)
+# =========================
+# 執行、儲存與寄送
+# =========================
+print("🚀 正在根據你的指令生成報告...")
+final_content = call_gemini_api(market_news, tech_news, finance_news)
 
-# =========================
-# 產出 Word（最終報告）
-# =========================
 doc = Document()
-# 移除原本叫你去貼給 AI 的段落，改為直接呈現分析內容
 doc.add_heading(f"Oracle & Wiwynn 產業分析月報 - {month}", level=0)
-doc.add_paragraph(final_report_content)
-
+doc.add_paragraph(final_content)
 doc.save(word_file)
-print(f"✅ Word report generated: {word_file}")
 
-# =========================
-# 寄送 Email
-# =========================
-if email_user and email_pass and email_to:
+if email_user and email_pass:
     msg = EmailMessage()
     msg["Subject"] = f"Oracle & Wiwynn 產業分析月報 - {month}"
     msg["From"] = email_user
     msg["To"] = email_to
-    msg.set_content(f"Flare 你好，附件為本月由 AI 自動生成的產業分析月報。")
+    msg.set_content("Flare 你好，本月分析報告已自動生成，請查收附件。")
 
     with open(word_file, "rb") as f:
-        msg.add_attachment(
-            f.read(),
-            maintype="application",
-            subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename=word_file
-        )
+        msg.add_attachment(f.read(), maintype="application", subtype="docx", filename=word_file)
 
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(email_user, email_pass)
-            smtp.send_message(msg)
-        print("✅ Email sent successfully")
-    except Exception as e:
-        print(f"❌ Email 寄送失敗: {e}")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(email_user, email_pass)
+        smtp.send_message(msg)
+    print("✅ 郵件已寄出")
