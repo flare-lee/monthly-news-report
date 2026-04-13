@@ -24,26 +24,25 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 3️⃣ 安裝套件
+      # 3️⃣ 安裝套件 (現在不需要安裝 google-generativeai 了，更輕量)
       - name: Install dependencies
         run: |
-          pip install feedparser python-docx requests
+          pip install python-docx
 
-      # 4️⃣ 跑你的 main.py（新增了 GEMINI_API_KEY 環境變數）
+      # 4️⃣ 跑你的 main.py
       - name: Run main script
         run: python main.py
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # 保留 Email 設定即可，不需要 GEMINI_API_KEY 了
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
 
-      # 5️⃣ 把產出的檔案存回 repo（CSV / docx）
+      # 5️⃣ 把產出的 Word 指令檔存回 repo
       - name: Commit output files
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          # 使用 --force 或檢查檔案是否存在以避免 git add 失敗
-          git add news_*.csv report_*.docx || echo "No files to add"
-          git commit -m "Monthly auto-generated industry report" || echo "No changes to commit"
+          git add report_instruction_*.docx || echo "No files to add"
+          git commit -m "Monthly auto-generated AI prompt instruction" || echo "No changes to commit"
           git push
