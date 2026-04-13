@@ -22,7 +22,7 @@ email_to = os.getenv("EMAIL_TO")
 market_news, tech_news, finance_news = [], [], []
 
 if not os.path.exists(csv_file):
-    print(f"❌ 找不到 CSV 檔案：{csv_file}")
+    print(f"❌ 嚴重錯誤：找不到檔案 {csv_file}")
     exit(1)
 
 with open(csv_file, newline="", encoding="utf-8") as f:
@@ -40,7 +40,7 @@ with open(csv_file, newline="", encoding="utf-8") as f:
             finance_news.append(content)
 
 # =========================
-# 3. 組成 AI 專用指令 (使用 Flare 指定的文字)
+# 3. 組合 Flare 專屬「華爾街分析師」指令字串
 # =========================
 ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
@@ -100,26 +100,26 @@ ai_prompt = f"""
 # =========================
 doc = Document()
 doc.add_heading(f"Oracle & Wiwynn 產業分析指令 - {month}", 0)
-doc.add_paragraph("【操作說明】全選下方內容並貼至 ChatGPT / Gemini 即可產出專業報告。")
+doc.add_paragraph("Flare，請全選下方內容並貼至 ChatGPT / Gemini 網頁版即可產出專業報告：")
 doc.add_paragraph("--------------------------------------------------")
 doc.add_paragraph(ai_prompt)
 doc.save(word_file)
 
 # =========================
-# 5. 寄件 (這部分保留，這樣你收信就能直接複製)
+# 5. 寄送郵件 (包含 Word 附件)
 # =========================
 if email_user and email_pass:
     msg = EmailMessage()
-    msg["Subject"] = f"【指令產生】Oracle & Wiwynn 產業月報分析指令 - {month}"
+    msg["Subject"] = f"【AI 指令產出】Oracle & Wiwynn 產業分析 - {month}"
     msg["From"] = email_user
     msg["To"] = email_to
-    msg.set_content(f"Flare 你好，本月的 AI 指令已準備好。請打開附件 Word，複製內容後貼給 AI 即可生成專業報告。")
+    msg.set_content(f"Flare 你好，本月的 AI 分析指令已準備好。請打開附件 Word 複製文字後貼給 AI。")
     with open(word_file, "rb") as f:
         msg.add_attachment(f.read(), maintype="application", subtype="docx", filename=word_file)
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(email_user, email_pass)
             smtp.send_message(msg)
-        print("✅ 郵件寄送成功，請去信箱收信！")
+        print("✅ 指令 Word 已寄出！")
     except Exception as e:
-        print(f"❌ 郵件寄送失敗: {e}")
+        print(f"❌ 郵件失敗: {e}")
