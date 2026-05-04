@@ -19,23 +19,29 @@ email_user = os.getenv("EMAIL_USER")
 email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
-# 鎖定搜尋目標
+# 🌍 升級雙語雙軌搜尋：針對不同需求切換語系
 TARGETS = [
-    {"company": "Oracle", "keyword": "Oracle cloud AI server"},
-    {"company": "Wiwynn", "keyword": "緯穎 AI 伺服器"}
+    {"company": "Oracle", "keyword": "Oracle cloud AI server data center", "lang": "en"},
+    {"company": "Oracle", "keyword": "甲骨文 伺服器 雲端", "lang": "tw"},
+    {"company": "Wiwynn", "keyword": "Wiwynn AI server", "lang": "en"},
+    {"company": "Wiwynn", "keyword": "緯穎 AI 伺服器 散熱", "lang": "tw"}
 ]
 
 # =========================
-# 2. 自動上網搜集情報 (被找回的靈魂爬蟲模組)
+# 2. 自動上網搜集情報 (雙語爬蟲模組)
 # =========================
-print(f"🔍 開始啟動 {month} 月份情報搜集...")
+print(f"🔍 開始啟動 {month} 月份情報搜集 (包含國際外媒與台灣供應鏈)...")
 all_news = []
 
 for target in TARGETS:
     company = target["company"]
-    # 搜尋過去 30 天新聞
     safe_keyword = urllib.parse.quote(f"{target['keyword']} when:30d")
-    url = f"https://news.google.com/rss/search?q={safe_keyword}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+    
+    # 根據設定決定要爬美國外媒還是台灣新聞
+    if target["lang"] == "en":
+        url = f"https://news.google.com/rss/search?q={safe_keyword}&hl=en-US&gl=US&ceid=US:en"
+    else:
+        url = f"https://news.google.com/rss/search?q={safe_keyword}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
     
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -46,17 +52,28 @@ for target in TARGETS:
         for item in root.findall('.//item'):
             title = item.find('title').text
             pub_date = item.find('pubDate').text
-            date_str = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z").strftime("%Y-%m-%d")
+            # 統一時間格式處理
+            try:
+                date_str = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z").strftime("%Y-%m-%d")
+            except:
+                date_str = datetime.now().strftime("%Y-%m-%d") # 若解析失敗則用今天
             all_news.append([date_str, title, company])
     except Exception as e:
-        print(f"❌ 抓取 {company} 新聞時發生錯誤: {e}")
+        print(f"❌ 抓取 {company} ({target['lang']}) 新聞時發生錯誤: {e}")
 
-# 將抓到的新聞寫入 CSV 檔案
+# 去除重複的新聞標題
+unique_news = []
+seen_titles = set()
+for news in all_news:
+    if news[1] not in seen_titles:
+        unique_news.append(news)
+        seen_titles.add(news[1])
+
 with open(csv_file, mode="w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["date", "title", "company"])
-    writer.writerows(all_news)
-print(f"✅ 成功扒下 {len(all_news)} 則新聞，已存入 {csv_file}！")
+    writer.writerows(unique_news)
+print(f"✅ 成功扒下 {len(unique_news)} 則跨國新聞，已存入 {csv_file}！")
 
 # =========================
 # 3. 讀取並分類新聞
@@ -70,11 +87,12 @@ with open(csv_file, newline="", encoding="utf-8") as f:
         company = r.get("company", "未知公司")
         content = f"- {company}：{r.get('title', '')}"
         
-        if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
+        # 中英關鍵字同步擴充
+        if any(k in title for k in ["cloud", "ai", "market", "demand", "growth", "雲端", "市場", "需求"]):
             market_news.append(content)
-        if any(k in title for k in ["data center", "server", "rack", "infrastructure", "伺服器", "散熱"]):
+        if any(k in title for k in ["data center", "server", "rack", "infrastructure", "伺服器", "機櫃", "散熱", "液冷"]):
             tech_news.append(content)
-        if any(k in title for k in ["capex", "investment", "revenue", "order", "營收", "資本", "財報"]):
+        if any(k in title for k in ["capex", "investment", "revenue", "order", "營收", "資本", "財報", "訂單"]):
             finance_news.append(content)
 
 # =========================
@@ -118,7 +136,7 @@ ai_prompt = f"""
 請清楚區分短期市場變化與中長期結構性趨勢，
 並說明這些變化對 Oracle、ODM/OEM 與終端客戶各自的商業含義。
 
-＝＝＝＝ 本月已整理新聞資料 ＝＝＝＝
+＝＝＝＝ 本月已整理新聞資料 (全球+在地) ＝＝＝＝
 
 【市場趨勢相關新聞】
 {chr(10).join(market_news)}
@@ -144,6 +162,7 @@ doc.save(word_file)
 # 6. 寄送郵件 (包含 Word 附件)
 # =========================
 if email_user and email_pass:
+    print(f"📧 偵測到 Email 帳號 {email_user}，準備寄出...")
     msg = EmailMessage()
     msg["Subject"] = f"【AI 指令產出】Oracle & Wiwynn 產業分析 - {month}"
     msg["From"] = email_user
@@ -155,6 +174,8 @@ if email_user and email_pass:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(email_user, email_pass)
             smtp.send_message(msg)
-        print("✅ 指令 Word 已寄出！")
+        print("✅ 指令 Word 已成功寄出！")
     except Exception as e:
-        print(f"❌ 郵件失敗: {e}")
+        print(f"❌ 郵件寄送失敗: {e}")
+else:
+    print("⚠️ 警告：未讀取到 EMAIL_USER 或 EMAIL_PASS，跳過寄信步驟。請檢查 GitHub Actions 的 .yml 設定！")
