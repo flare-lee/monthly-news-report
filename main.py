@@ -1,5 +1,8 @@
 import os
 import csv
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from docx import Document
 import smtplib
@@ -16,18 +19,49 @@ email_user = os.getenv("EMAIL_USER")
 email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
+# 鎖定搜尋目標
+TARGETS = [
+    {"company": "Oracle", "keyword": "Oracle cloud AI server"},
+    {"company": "Wiwynn", "keyword": "緯穎 AI 伺服器"}
+]
+
 # =========================
-# 2. 讀取並分類新聞 (✅ 自動防呆機制已加入)
+# 2. 自動上網搜集情報 (被找回的靈魂爬蟲模組)
+# =========================
+print(f"🔍 開始啟動 {month} 月份情報搜集...")
+all_news = []
+
+for target in TARGETS:
+    company = target["company"]
+    # 搜尋過去 30 天新聞
+    safe_keyword = urllib.parse.quote(f"{target['keyword']} when:30d")
+    url = f"https://news.google.com/rss/search?q={safe_keyword}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            xml_data = response.read()
+            
+        root = ET.fromstring(xml_data)
+        for item in root.findall('.//item'):
+            title = item.find('title').text
+            pub_date = item.find('pubDate').text
+            date_str = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z").strftime("%Y-%m-%d")
+            all_news.append([date_str, title, company])
+    except Exception as e:
+        print(f"❌ 抓取 {company} 新聞時發生錯誤: {e}")
+
+# 將抓到的新聞寫入 CSV 檔案
+with open(csv_file, mode="w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["date", "title", "company"])
+    writer.writerows(all_news)
+print(f"✅ 成功扒下 {len(all_news)} 則新聞，已存入 {csv_file}！")
+
+# =========================
+# 3. 讀取並分類新聞
 # =========================
 market_news, tech_news, finance_news = [], [], []
-
-# 🛑 釜底抽薪：如果找不到檔案，直接無中生有建一個帶有表頭的空 CSV
-if not os.path.exists(csv_file):
-    print(f"⚠️ 找不到本月檔案 {csv_file}，系統已自動為你建立一個空白的新聞庫範本！")
-    with open(csv_file, mode="w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        # 建立預設的表頭，確保後面的 DictReader 讀取時格式正確
-        writer.writerow(["date", "title", "company"])
 
 with open(csv_file, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
@@ -38,13 +72,13 @@ with open(csv_file, newline="", encoding="utf-8") as f:
         
         if any(k in title for k in ["cloud", "ai", "market", "demand", "growth"]):
             market_news.append(content)
-        if any(k in title for k in ["data center", "server", "rack", "infrastructure"]):
+        if any(k in title for k in ["data center", "server", "rack", "infrastructure", "伺服器", "散熱"]):
             tech_news.append(content)
-        if any(k in title for k in ["capex", "investment", "revenue", "order"]):
+        if any(k in title for k in ["capex", "investment", "revenue", "order", "營收", "資本", "財報"]):
             finance_news.append(content)
 
 # =========================
-# 3. 組合 Flare 專屬「華爾街分析師」指令字串
+# 4. 組合 Flare 專屬「華爾街分析師」指令字串
 # =========================
 ai_prompt = f"""
 你是一位【華爾街資深產業分析師 / 顧問公司資深策略顧問】。
@@ -97,7 +131,7 @@ ai_prompt = f"""
 """
 
 # =========================
-# 4. 存入 Word
+# 5. 存入 Word
 # =========================
 doc = Document()
 doc.add_heading(f"Oracle & Wiwynn 產業分析指令 - {month}", 0)
@@ -107,7 +141,7 @@ doc.add_paragraph(ai_prompt)
 doc.save(word_file)
 
 # =========================
-# 5. 寄送郵件 (包含 Word 附件)
+# 6. 寄送郵件 (包含 Word 附件)
 # =========================
 if email_user and email_pass:
     msg = EmailMessage()
