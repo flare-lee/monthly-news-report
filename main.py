@@ -17,13 +17,17 @@ email_pass = os.getenv("EMAIL_PASS")
 email_to = os.getenv("EMAIL_TO")
 
 # =========================
-# 2. 讀取並分類新聞
+# 2. 讀取並分類新聞 (✅ 自動防呆機制已加入)
 # =========================
 market_news, tech_news, finance_news = [], [], []
 
+# 🛑 釜底抽薪：如果找不到檔案，直接無中生有建一個帶有表頭的空 CSV
 if not os.path.exists(csv_file):
-    print(f"❌ 嚴重錯誤：找不到檔案 {csv_file}")
-    exit(1)
+    print(f"⚠️ 找不到本月檔案 {csv_file}，系統已自動為你建立一個空白的新聞庫範本！")
+    with open(csv_file, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        # 建立預設的表頭，確保後面的 DictReader 讀取時格式正確
+        writer.writerow(["date", "title", "company"])
 
 with open(csv_file, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
